@@ -30,10 +30,11 @@ class Softonic:
                 while True:
                     try:
                         response = requests.get(url)
+                        ic(response)
 
-                        if response == 200: break
-                        if response == 500: break
-                        if response == 403: break
+                        if response.status_code == 200: break
+                        if response.status_code == 500: break
+                        if response.status_code == 403: break
 
                         sleep(retry_interval)
                         retry_interval+=5
@@ -52,9 +53,9 @@ class Softonic:
                     try:
                         response = requests.get(url)
 
-                        if response == 200: break
-                        if response == 500: break
-                        if response == 403: break
+                        if response.status_code == 200: break
+                        if response.status_code == 500: break
+                        if response.status_code == 403: break
 
                         sleep(retry_interval)
                         retry_interval+=5
@@ -70,10 +71,11 @@ class Softonic:
         ...
 
     def __fetch_categories(self, url: str) -> List[str]:
-        response: Response = self.__retry(url=url)
-        
+        response: Response = self.__retry(url=url, action='get')
+
         ...
 
     def main(self):
+        self.__fetch_categories(url=self.MAIN_URL)
 
         ...
