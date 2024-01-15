@@ -15,8 +15,11 @@ from src.utils.corrector import vname
 class Softonic:
     def __init__(self) -> None:
 
+        self.__file = File()
+        self.__parser = Parser()
+
         self.MAIN_DOMAIN = 'en.softonic.com'
-        self.MAIN_URL = 'https://en.softonic.com/windows/action'
+        self.MAIN_URL = 'https://en.softonic.com/'
 
         ...
 
@@ -45,6 +48,8 @@ class Softonic:
                         retry_interval+=5
                         ...
                     ...
+                
+                return response
                 ...
 
             case 'post':
@@ -72,6 +77,11 @@ class Softonic:
 
     def __fetch_categories(self, url: str) -> List[str]:
         response: Response = self.__retry(url=url, action='get')
+        html = PyQuery(response.text)
+
+        categories_urls = [PyQuery(categories).attr('href') for categories in html.find('#sidenav-menu a[class="WNTOdu tEDxqA js-menu-categories-item"]')]
+        
+        self.__file.write_json(path='private/categories.json', content=categories_urls)
 
         ...
 
