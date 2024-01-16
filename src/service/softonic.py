@@ -97,7 +97,7 @@ class Softonic:
 
     def __param_second_cursor(self, cursor: str, thread: str) -> str:
 
-        return f'https://disqus.com/api/3.0/threads/listPostsThreaded?limit=50&thread={thread}&forum=en-softonic-com&order=popular&cursor={cursor}:0:0&api_key={self.API_KEY}'
+        return f'https://disqus.com/api/3.0/threads/listPostsThreaded?limit=50&thread={thread}&forum=en-softonic-com&order=popular&cursor={cursor}&api_key={self.API_KEY}'
         ...
 
 
@@ -137,8 +137,15 @@ class Softonic:
             "language": PyQuery(headers.find('ul[class="app-header__features"] > li[class="app-header__item"]')[1]).text(),
             "status": PyQuery(headers.find('ul[class="app-header__features"] > li[class="app-header__item"]')[0]).text(),
             "descriptions": descs,
-            "related_topics": [PyQuery(relevant).text() for relevant in headers.find('ul.related-topics__list > li')]
+            "related_topics": [PyQuery(relevant).text() for relevant in headers.find('ul.related-topics__list > li')],
         }
+
+        for spec in headers.find('ul.app-specs__list > li'):
+            detail_game.update(
+                {
+                    PyQuery(spec).find('h3').text(): PyQuery(spec).find('p').text()
+                }
+            )
 
         ... 
 
@@ -157,13 +164,17 @@ class Softonic:
 
         disqus_page = PyQuery(response.text)
         reviews = json.loads(disqus_page.find('#disqus-threadData').text())
-        
         all_reviews = []
         while True:
 
             for review in reviews["response"]["posts"]:
                 all_reviews.append(review)
 
+            if not reviews["cursor"]["hasNext"]: break
+            ic(reviews["cursor"]["hasNext"])
+            reviews = self.__retry(url=self.__param_second_cursor(
+                thread=reviews["response"]["posts"][0]["thread"],
+                cursor=reviews["cursor"]["next"]))
             break
 
         ic(len(all_reviews))
@@ -195,7 +206,7 @@ class Softonic:
 
                     "total_reviews": len(all_reviews),
                     "reviews_rating": {
-                        "total_rating": PyQuery(headers.find('main.page div.main-aside__main svg[class="rating-star rating-star--fix-medium rating-info__star"]')[0]).text(),
+                        "total_rating": html.find('body > main > div:nth-child(2) > div > div > div > div:nth-child(2) > div.header-columns__main > div > div.s-media__body.app-header__body > ul:nth-child(3) > li.app-header__item.app-header__item--double > div > p').text(),
                         "detail_total_rating": None
                     },
                     "detail_reviews_rating": [
