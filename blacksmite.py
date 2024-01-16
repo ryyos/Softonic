@@ -136,8 +136,7 @@ class Softonic:
             "version": PyQuery(headers.find('li[data-meta="version"]')[0]).text().replace('V ', ''),
             "language": PyQuery(headers.find('ul[class="app-header__features"] > li[class="app-header__item"]')[1]).text(),
             "status": PyQuery(headers.find('ul[class="app-header__features"] > li[class="app-header__item"]')[0]).text(),
-            "descriptions": descs,
-            "related_topics": [PyQuery(relevant).text() for relevant in headers.find('ul.related-topics__list > li')]
+            "descriptions": descs
         }
 
         ... 
@@ -167,66 +166,91 @@ class Softonic:
             break
 
         ic(len(all_reviews))
+
         
-        temporarys = []
         for review in all_reviews:
-            ic(len(temporarys))
-
-            if review["parent"]:
-                for parent in temporarys:
-                    if parent["id"] == review["parent"]:
-                        parent["reply_content_reviews"].append({
-                            "username_reply_reviews":  review["author"]["name"],
-                            "content_reviews": review["raw_message"]
-                        })
-                        parent["total_reply_reviews"] +=1
             
-            else:
-                detail_review = {
-                    "id": int(review["id"]),
-                    "username_reviews": review["author"]["name"],
-                    "image_reviews": 'https:'+review["author"]["avatar"]["permalink"],
-                    "created_time": review["createdAt"].replace('T', ' '),
-                    "created_time_epoch": self.__convert_time(review["createdAt"]),
-                    "email_reviews": None,
-                    "company_name": None,
-                    "location_reviews": None,
-                    "title_detail_reviews": None,
+            detail_review = {
+                "username_reviews": review["author"]["name"],
+                "image_reviews": 'https:'+review["author"]["avatar"]["permalink"],
+                "created_time": review["createdAt"].replace('T', ' '),
+                "created_time_epoch": self.__convert_time(review["createdAt"]),
+                "email_reviews": None,
+                "company_name": None,
+                "location_reviews": None,
+                "title_detail_reviews": None,
+                "reviews_rating": None,
+                "detail_reviews_rating": [
+                    {
+                    "score_rating": None,
+                    "category_rating": None
+                    }
+                ],
+                "total_likes_reviews": review["likes"],
+                "total_dislikes_reviews": review["dislikes"],
+                "total_reply_reviews": 0,
+                "content_reviews": review["raw_message"],
+                "reply_content_reviews": [],
+                "date_of_experience": review["createdAt"].replace('T', ' '),
+                "date_of_experience_epoch": self.__convert_time(review["createdAt"])
+            }
+            
 
+            if not review["author"].get("username", None):
+                ic('tidak ada username')
+                ic(review["author"]["name"])
+                raw_game.update({
+                    "reviews_name": detail_game["title"],
                     "total_reviews": len(all_reviews),
                     "reviews_rating": {
-                        "total_rating": PyQuery(headers.find('main.page div.main-aside__main svg[class="rating-star rating-star--fix-medium rating-info__star"]')[0]).text(),
+                        "total_rating": PyQuery(headers.find('svg[class="rating-star rating-star--fix-medium rating-info__star"]')[0]).text(),
                         "detail_total_rating": None
                     },
-                    "detail_reviews_rating": [
-                        {
-                        "score_rating": None,
-                        "category_rating": None
-                        }
-                    ],
-                    "total_likes_reviews": review["likes"],
-                    "total_dislikes_reviews": review["dislikes"],
-                    "total_reply_reviews": 0,
-                    "content_reviews": review["raw_message"],
-                    "reply_content_reviews": [],
-                    "date_of_experience": review["createdAt"].replace('T', ' '),
-                    "date_of_experience_epoch": self.__convert_time(review["createdAt"])
-                }
+                    "detail_application": detail_game,
+                    "detail_reviews": detail_review,
+                })
+
+                self.__file.write_json(f'data/{raw_game["detail_reviews"]["username_reviews"]}.json', raw_game)
+
+                if self.detail_reviews: 
+                    raw_game["detail_reviews"] = self.detail_reviews
+                    self.__file.write_json(f'data/{raw_game["detail_reviews"]["username_reviews"]}.json', raw_game)
+
+
+            elif review["author"].get("username", None) and not review["parent"]:
+                ic('ada username tidak ada parent')
+                ic(review["author"]["name"])
+
+                if self.detail_reviews: 
+                    raw_game["detail_reviews"] = self.detail_reviews
+                    self.__file.write_json(path=f'data/{raw_game["detail_reviews"]["username_reviews"]}.json', content=raw_game)
+
+                self.detail_reviews.append(detail_review)
+                ic(len(self.detail_reviews))
+
+            elif review["author"].get("username", None) and review["parent"]:
+                ic('ada username ada parent')
+                ic(len(self.detail_reviews))
+                ic(review["author"]["name"])
                 
-                ic(detail_review["username_reviews"])
+                self.detail_reviews[-1]["reply_content_reviews"].append({
+                    "username_reply_reviews": review["author"]["name"],
+                    "content_reviews": review["raw_message"],
+                })
+                self.detail_reviews[-1]["total_reply_reviews"] = detail_review["total_reply_reviews"]+1
 
-                temporarys.append(detail_review)
+            self.__file.write_json(path=f'data/{vname(review["author"]["name"])}.json', content=raw_game)
 
-        for detail in temporarys:
+            # ic(review["parent"])
 
-            raw_game.update({
-                "detail_reviews": detail,
-                "detail_applications": detail_game,
-                "reviews_name": detail_game["title"]
-            })
-
-            ic(detail["username_reviews"])
-            self.__file.write_json(path=f'data/{detail["username_reviews"]}.json', content=raw_game)
+            # if review["parent"]:
+            #     ic('masuk')
+            #     replys[-1]["detail_reviews"]["reply_content_reviews"].append(
+            #         {
+            #             "username_reply_reviews":  review["author"]["name"],
+            #             "content_reviews": review["raw_message"]
+            #         }
+            #     )
 
         ...
 
