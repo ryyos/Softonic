@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+import datetime as date
 
 from time import time, strftime, sleep
 from pyquery import PyQuery
@@ -8,6 +9,7 @@ from requests import Response
 from typing import List
 from icecream import ic
 from requests_html import HTMLSession
+from datetime import datetime, timezone
 
 from src.utils.fileIO import File
 from src.utils.logs import logger
@@ -81,6 +83,14 @@ class Softonic:
                         ic(err)
                         sleep(retry_interval)
                         retry_interval+=5
+        ...
+
+
+    def __convert_time(self, times: str) -> int:
+        dt = date.datetime.fromisoformat(times)
+        dt = dt.replace(tzinfo=timezone.utc) 
+
+        return int(dt.timestamp())
         ...
 
 
