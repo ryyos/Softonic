@@ -241,17 +241,6 @@ class Softonic:
 
             self.__file.write_json(path=f'data/{vname(review["author"]["name"])}.json', content=raw_game)
 
-            # ic(review["parent"])
-
-            # if review["parent"]:
-            #     ic('masuk')
-            #     replys[-1]["detail_reviews"]["reply_content_reviews"].append(
-            #         {
-            #             "username_reply_reviews":  review["author"]["name"],
-            #             "content_reviews": review["raw_message"]
-            #         }
-            #     )
-
         ...
 
 # json.loads(disqus_page.find('#disqus-threadData').text())
