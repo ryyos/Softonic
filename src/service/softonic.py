@@ -13,7 +13,8 @@ from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, wait
 
 from src.utils.fileIO import File
-from src.utils.logs import logger
+from src.utils.logger import logger
+from src.utils.Logs import Logs
 from src.utils.parser import Parser
 from src.utils.corrector import vname
 
@@ -50,12 +51,14 @@ class Softonic:
             "iphone"
         ]
 
+        self.RESPONSE_CODE = [200, 400, 404, 500]
+
         self.detail_reviews = []
         ...
 
 
     def __create_dir(self, raw_data: dict) -> str:
-        try: os.makedirs(f'{self.MAIN_PATH}/data_raw/data_review_app/{raw_data["platform"]}/{raw_data["type"]}/{raw_data["categories"]}/{vname(raw_data["reviews_name"].lower())}/json')
+        try: os.makedirs(f'{self.MAIN_PATH}/data_raw/data_review_app/{raw_data["platform"]}/{raw_data["type"]}/{raw_data["categories"]}/{vname(raw_data["reviews_name"].lower())}/json/detail')
         except Exception: ...
         finally: return f'{self.MAIN_PATH}/data_raw/data_review_app/{raw_data["platform"]}/{raw_data["type"]}/{raw_data["categories"]}/{vname(raw_data["reviews_name"].lower())}/json'
         ...
@@ -86,10 +89,7 @@ class Softonic:
                 logger.info(f'reponse: {response.status_code}')
                 print()
 
-                if response.status_code == 200: return response
-                if response.status_code == 500: return response
-                if response.status_code == 403: return response
-                if response.status_code == 404: return response
+                if response.status_code in self.RESPONSE_CODE: return response
 
                 logger.warning(f'request to: {url}')
                 logger.warning(f'reponse: {response.status_code}')
@@ -179,6 +179,23 @@ class Softonic:
 
         ... 
 
+        ... # Write only detail
+
+
+        raw_game["reviews_name"] = detail_game["title"]
+        ic(raw_game["reviews_name"])
+
+        path_detail = f'{self.__create_dir(raw_game)}/detail/{vname(detail_game["title"])}.json'
+
+        raw_game.update({
+            "detail_applications": detail_game,
+            "path_data_raw": path_detail,
+            "path_data_clean": self.__convert_path(path_detail)
+        })
+
+        self.__file.write_json(path_detail, raw_game)
+        ...
+
         ... # request to comments param
 
         response = self.__retry(url=f'{url_game}/comments')
@@ -189,15 +206,17 @@ class Softonic:
 
         ... # extract disqus review
 
-        response = self.__retry(url=self.__build_param_disqus(name_apk=game_title, url_apk=url_game), 
-                        )
+        response = self.__retry(url=self.__build_param_disqus(name_apk=game_title, url_apk=url_game))
 
         disqus_page = PyQuery(response.text)
         reviews_temp = json.loads(disqus_page.find('#disqus-threadData').text())
 
         all_reviews = []
 
+        ic(len(reviews_temp["response"]["posts"]))
+
         for review in reviews_temp["response"]["posts"]:
+            
             all_reviews.append(review)
 
         try:
@@ -210,16 +229,46 @@ class Softonic:
                     thread=thread,
                     cursor=cursor)).json()
 
+                if not reviews["cursor"]["hasNext"]: 
+
+                    ... # Berhasil mengambil semua review
+                    Logs.succes(status="done",
+                                total=len(all_reviews),
+                                source=raw_game["reviews_name"],
+                                success=len(all_reviews),
+                                failed=0)
+                    
+                    break
+                
+                if response.status_code != 200:
+
+                    ... #  Jika gagal request ke  review page selanjutnya
+                    Logs.error(status=response,
+                                message=response.text,
+                                total=len(all_reviews) + 50,
+                                success=len(all_reviews),
+                                failed=int(50),
+                                source=raw_game["reviews_name"])
+                    
+                    break
+
                 cursor = reviews["cursor"]["next"]
                 logger.info(f'cursor: {cursor}')
 
-                if not reviews["cursor"]["hasNext"]: break
 
                 for review in reviews["response"]:
                     all_reviews.append(review)
 
-        except Exception:
+        except Exception as err:
+            ic(err)
+            Logs.succes(status="done",
+                        total=len(all_reviews),
+                        source=raw_game["reviews_name"],
+                        success=len(all_reviews),
+                        failed=0)
             ...
+
+        ic(len(all_reviews))
 
         temporarys = []
         for review in all_reviews:
@@ -248,7 +297,7 @@ class Softonic:
 
                     "total_reviews": len(all_reviews),
                     "reviews_rating": {
-                        "total_rating": PyQuery(html.find('div[class="rating-info rating-info--fix-medium"]')[0]).text(),
+                        "total_rating": PyQuery(html.find('div.rating-info')[0]).text(),
                         "detail_total_rating": None
                     },
                     "detail_reviews_rating": [
@@ -285,16 +334,16 @@ class Softonic:
 
             self.__file.write_json(path=path, content=raw_game)
 
+        ic({
+            "len all review": len(all_reviews),
+            "len temp": len(temporarys),
+            "find review": len(reviews_temp["response"]["posts"])
+        })
+
         logger.info(f'application: {raw_game["url_game"]}')
         logger.info(f'category: {raw_game["categories"]}')
         logger.info(f'type: {raw_game["type"]}')
         logger.info(f'total review: {len(all_reviews)}')
-
-        self.__logging(path='logs/logs.txt',
-                    url=raw_game["url_game"],
-                    total=len(all_reviews),
-                    success=len(temporarys),
-                    failed=len(all_reviews) - len(temporarys))
 
         ...
 
@@ -330,6 +379,8 @@ class Softonic:
     def __fetch_categories(self, url: str) -> List[str]:
         response: Response = self.__retry(url=url)
         html = PyQuery(response.text)
+
+        ic(url)
     
         categories_urls = [PyQuery(categories).attr('href') for categories in html.find('#sidenav-menu a[class="menu-categories__link"]')]
         
@@ -373,9 +424,12 @@ class Softonic:
                     games = self.__fetch_game(url=f'{categories}:{type}')
 
                     for index, game in enumerate(games):
+
+                        ic(f'game: {game}')
                         ic(f'game to: {index}')
                         ic(f'platform: {self.platform}')
                         
+                        # self.__extract_game(game)
                         task_executor.append(self.__executor.submit(self.__extract_game, game))
                         ...
                     ...
@@ -383,4 +437,4 @@ class Softonic:
                 ...
             ...
         ...
-        # self.__executor.shutdown(wait=True)
+        self.__executor.shutdown(wait=True)

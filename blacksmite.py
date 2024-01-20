@@ -12,7 +12,7 @@ from requests_html import HTMLSession
 from datetime import datetime, timezone
 
 from src.utils.fileIO import File
-from src.utils.logs import logger
+from src.utils.logger import logger
 from src.utils.parser import Parser
 from src.utils.corrector import vname
 
