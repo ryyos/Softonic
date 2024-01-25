@@ -11,6 +11,7 @@ from icecream import ic
 from requests_html import HTMLSession
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, wait
+from zlib import crc32
 
 from src.utils.fileIO import File
 from src.utils.logger import logger
@@ -26,6 +27,7 @@ class Softonic:
         self.__executor = ThreadPoolExecutor(max_workers=10)
 
         self.__datas: List[dict] = []
+        self.__monitorings: List[dict] = []
         self.logs: List[dict] = []
 
         self.PIC = 'Rio Dwi Saputra'
@@ -70,9 +72,9 @@ class Softonic:
                 total: int, 
                 failed: int, 
                 success: int,
-                uid: str,
+                id_product: int,
                 sub_source: str,
-                id_data: int,
+                id_review: int,
                 status_runtime: str,
                 status_conditions: str,
                 type_error: str,
@@ -89,7 +91,7 @@ class Softonic:
             "sub_project": "data review",
             "source_name": "gofood.co.id",
             "sub_source_name": sub_source,
-            "id_sub_source": uid,
+            "id_sub_source": id_product,
             "total_data": total,
             "total_success": success,
             "total_failed": failed,
@@ -102,10 +104,10 @@ class Softonic:
             "id_project": None,
             "project": "Data Intelligence",
             "sub_project": "data review",
-            "source_name": "gofood.co.id",
+            "source_name": "en.softonic.com",
             "sub_source_name": sub_source,
-            "id_sub_source": uid,
-            "id_data": id_data,
+            "id_sub_source": id_product,
+            "id_data": id_review,
             "process_name": "Crawling",
             "status": status_runtime,
             "type_error": type_error,
@@ -114,7 +116,7 @@ class Softonic:
         }
 
         for index, data in enumerate(self.__datas):
-            if uid in data["id_sub_source"]:
+            if id_product in data["id_sub_source"]:
                 self.__datas[index]["total_data"] = total
                 self.__datas[index]["total_success"] = success
                 self.__datas[index]["total_failed"] = failed
@@ -264,6 +266,7 @@ class Softonic:
         reviews_temp = json.loads(disqus_page.find('#disqus-threadData').text())
 
         all_reviews = []
+        total_error = 0
 
         ic(len(reviews_temp["response"]["posts"]))
 
@@ -281,27 +284,10 @@ class Softonic:
                     thread=thread,
                     cursor=cursor)).json()
 
-                if not reviews["cursor"]["hasNext"]: 
-
-                    ... # Berhasil mengambil semua review
-                    Logs.succes(status="done",
-                                total=len(all_reviews),
-                                source=raw_game["reviews_name"],
-                                success=len(all_reviews),
-                                failed=0)
-                    
-                    break
+                if not reviews["cursor"]["hasNext"]: break
                 
                 if response.status_code != 200:
-
-                    ... #  Jika gagal request ke review page selanjutnya
-                    Logs.error(status=response,
-                                message=response.text,
-                                total=len(all_reviews) + 50,
-                                success=len(all_reviews),
-                                failed=int(50),
-                                source=raw_game["reviews_name"])
-                    
+                    total_error+=1
                     break
 
                 cursor = reviews["cursor"]["next"]
@@ -312,20 +298,26 @@ class Softonic:
                     all_reviews.append(review)
 
         except Exception as err:
-            ic(err)
-            ... # Jika Product tidak memiliki review
-            Logs.succes(status="done",
-                        total=len(all_reviews),
-                        source=raw_game["reviews_name"],
-                        success=len(all_reviews),
-                        failed=0)
             ...
 
         ic(len(all_reviews))
 
         temporarys = []
-        for review in all_reviews:
-            ic(len(temporarys))
+        for index, review in enumerate(all_reviews):
+            
+            ... # Logging
+            self.__logging(id_product=crc32(vname(detail_game["title"]).encode('utf-8')),
+                           id_review=review["id"],
+                           status_conditions='on progress',
+                           status_runtime='success',
+                           total=len(all_reviews),
+                           success=index,
+                           failed=0,
+                           sub_source=detail_game["title"],
+                           message=None,
+                           type_error=None)
+
+            ...
 
             if review["parent"]:
                 for parent in temporarys:
@@ -368,7 +360,42 @@ class Softonic:
                     "date_of_experience_epoch": self.__convert_time(review["createdAt"])
                 }
 
-                temporarys.append(detail_review)
+                path = f'{self.__create_dir(raw_data=raw_game)}/{detail_review["id"]}.json'
+
+
+                raw_game.update({
+                    "detail_reviews": detail_review,
+                    "detail_applications": detail_game,
+                    "reviews_name": detail_game["title"],
+                    "path_data_raw": path,
+                    "path_data_clean": self.__convert_path(path),
+                })
+
+                self.__file.write_json(path=path, content=raw_game)
+
+                
+
+
+        if total_error:    
+            message="failed request to api review"
+            type_error="request failed"
+            runtime = 'error'
+        else:
+            message = None
+            runtime = 'success'
+            type_error = None
+
+        self.__logging(id_product=crc32(vname(detail_game["title"]).encode('utf-8')),
+                        id_review=review["id"],
+                        status_conditions=runtime,
+                        status_runtime='error',
+                        total=len(all_reviews),
+                        success=len(all_reviews),
+                        failed=total_error,
+                        sub_source=detail_game["title"],
+                        message=message,
+                        type_error=type_error)
+    
 
         for detail in temporarys:
 
