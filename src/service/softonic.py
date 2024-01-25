@@ -23,7 +23,9 @@ class Softonic:
 
         self.__file = File()
         self.__parser = Parser()
-        self.__executor = ThreadPoolExecutor()
+        self.__executor = ThreadPoolExecutor(max_workers=10)
+
+        self.__datas: List[dict] = []
         self.logs: List[dict] = []
 
         self.PIC = 'Rio Dwi Saputra'
@@ -64,18 +66,68 @@ class Softonic:
         ...
 
 
-    def __logging(self, path: str, url: str, total: int, failed: int = 0, success: int = 0) -> None:
-        ic('masuk logs')
+    def __logging(self,
+                total: int, 
+                failed: int, 
+                success: int,
+                uid: str,
+                sub_source: str,
+                id_data: int,
+                status_runtime: str,
+                status_conditions: str,
+                type_error: str,
+                message: str):
+
+        uid_found = False
+        MONITORING_DATA = 'logs/monitoring_gofood.json'
+        MONITORING_LOG = 'logs/monitoring_logs.json'
+
         content = {
-              "source": url,
-              "total_data": total,
-              "total_data_berhasil_diproses": success,
-              "total_data_gagal_diproses": failed,
-              "PIC": self.PIC,
-            }
-        with open(path, 'a+', encoding= "utf-8") as file:
-            file.write(f'{str(content)}\n')
-        ...
+            "Crawlling_time": strftime('%Y-%m-%d %H:%M:%S'),
+            "id_project": None,
+            "project": "Data Intelligence",
+            "sub_project": "data review",
+            "source_name": "gofood.co.id",
+            "sub_source_name": sub_source,
+            "id_sub_source": uid,
+            "total_data": total,
+            "total_success": success,
+            "total_failed": failed,
+            "status": status_conditions,
+            "assign": "Rio"
+        }
+
+        monitoring = {
+            "Crawlling_time": strftime('%Y-%m-%d %H:%M:%S'),
+            "id_project": None,
+            "project": "Data Intelligence",
+            "sub_project": "data review",
+            "source_name": "gofood.co.id",
+            "sub_source_name": sub_source,
+            "id_sub_source": uid,
+            "id_data": id_data,
+            "process_name": "Crawling",
+            "status": status_runtime,
+            "type_error": type_error,
+            "message": message,
+            "assign": "Rio"
+        }
+
+        for index, data in enumerate(self.__datas):
+            if uid in data["id_sub_source"]:
+                self.__datas[index]["total_data"] = total
+                self.__datas[index]["total_success"] = success
+                self.__datas[index]["total_failed"] = failed
+                self.__datas[index]["status"] = status_conditions
+                uid_found = True
+                break
+
+        if not uid_found:
+            self.__datas.append(content)
+
+        self.__monitorings.append(monitoring)
+        Logs.write(MONITORING_DATA, self.__datas)
+        Logs.write(MONITORING_LOG, self.__monitorings)
 
 
     def __retry(self, url: str, 
@@ -242,7 +294,7 @@ class Softonic:
                 
                 if response.status_code != 200:
 
-                    ... #  Jika gagal request ke  review page selanjutnya
+                    ... #  Jika gagal request ke review page selanjutnya
                     Logs.error(status=response,
                                 message=response.text,
                                 total=len(all_reviews) + 50,
@@ -261,6 +313,7 @@ class Softonic:
 
         except Exception as err:
             ic(err)
+            ... # Jika Product tidak memiliki review
             Logs.succes(status="done",
                         total=len(all_reviews),
                         source=raw_game["reviews_name"],
@@ -388,7 +441,7 @@ class Softonic:
         
     def __extract_game(self, url_game: str) -> None:
         ic(url_game)
-        response = self.__retry(url=url_game.replace('/comments', ''))
+        response = self.__retry(url=url_game["url"].replace('/comments', ''))
 
         results_header = {
             "link": self.MAIN_URL,
@@ -401,10 +454,10 @@ class Softonic:
             "reviews_name": "name_game",
             "location_reviews": None,
             "category_reviews": "application",
-            "url_game": url_game,
+            "url_game": url_game["url"],
             "type": PyQuery(response.text).find('meta[property="rv-recat"]').attr('content').split(',')[0],
             "categories": PyQuery(response.text).find('meta[property="rv-recat"]').attr('content').split(',')[-1],
-            "platform": self.platform
+            "platform": url_game["platform"]
         }
 
         self.__extract_review(raw_game=results_header)
@@ -415,25 +468,30 @@ class Softonic:
 
         for platform in self.PLATFORMS:
             categories_urls = self.__fetch_categories(url=self.MAIN_URL+platform)
-            self.platform = platform
 
             for categories in categories_urls:
 
-                task_executor = []
                 for type in self.TYPES:
                     games = self.__fetch_game(url=f'{categories}:{type}')
 
+                    task_executor = []
                     for index, game in enumerate(games):
 
                         ic(f'game: {game}')
                         ic(f'game to: {index}')
-                        ic(f'platform: {self.platform}')
+
+                        igredation = {
+                            "platform": platform,
+                            "url": game
+                        }
+
+                        ic(igredation)
                         
                         # self.__extract_game(game)
-                        task_executor.append(self.__executor.submit(self.__extract_game, game))
+                        task_executor.append(self.__executor.submit(self.__extract_game, igredation))
                         ...
+                    wait(task_executor)
                     ...
-                wait(task_executor)
                 ...
             ...
         ...
